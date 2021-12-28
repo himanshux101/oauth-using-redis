@@ -153,10 +153,78 @@ app.get("/logout", (req, res) => {
  */
 app.get("/refresh", (req, res) => {
   try {
+    let reqData = req.body || {};
+
+    if (!reqData.refreshToken) {
+      // todo: throw error
+      return;
+    }
+
+    let userData = utils.verifyRefreshToken(reqData.refreshToken);
+
+    console.log("user data from refresh token is -> ", userData);
+
+    if (!userData) {
+      // todo: throw error
+      return;
+    }
+
+    let result = await service._removeRefreshTokenFromCache(
+      userData._id,
+      reqData.refreshToken
+    );
+
+    console.log("result is -> ", result);
+
+    if (!result) {
+      // todo: throw error
+      return;
+    }
+
+    let user = _getUserData(userData);
+
+    let { accessToken, refreshToken } = await _generateTokens(user);
+    console.log("response is -> ", accessToken, refreshToken);
+
+    // todo: transfer all the functions on the bottom of the file
+    // both functions from above
+    await this._saveRefreshTokenInCache(userData._id, refreshToken.token);
+
+    await this._removeAllExpiredRefreshToken(userData._id);
+
+    res.send({
+      success: true,
+      data: {
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      },
+    });
   } catch (e) {
     console.error("[error] [/refresh] ", e);
   }
 });
+
+function _getUserData(userData) {
+  return {
+      _id: userData._id,
+      country: userData.country,
+      language: userData.language,
+      email: userData.email,
+      key: userData.key,
+  }
+}
+
+async function _generateTokens(user) {
+  try {
+    let accessToken = await utils.generateAccessToken(user);
+    let refreshToken = await utils.generateRefreshToken(user);
+
+    return { accessToken, refreshToken };
+  } catch (err) {
+    console.log("error in genrating token -> ", err);
+    return null;
+  }
+}
 
 app.listen(port, () => {
   // todo: setup the init redis functions here
